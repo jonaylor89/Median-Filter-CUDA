@@ -5,4 +5,4 @@
 
 Analyze git repositories for secrets and keys
 
-Parallelized with rust and tokio async library
+Parallelized with async rust
