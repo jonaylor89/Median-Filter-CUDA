@@ -1,1 +1,4 @@
-/target
+target/
+opencv/
+main
+a.out
