@@ -24,7 +24,7 @@ __global__ void rgbaToGreyscaleGPU(
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
 
-    if (x >= cols || y >= rows)
+    if (x > cols || y > rows)
     {
         return;
     }
@@ -109,6 +109,8 @@ int main(int argc, char **argv)
     uchar4 *d_rgbaImage;
     unsigned char *d_greyImage;
 
+    struct timespec start, end;
+
     // Read in image
     err = readImage(input_file, &inputImage, &inputImageGrey, &rows, &cols);
     if (err != 0)
@@ -131,10 +133,17 @@ int main(int argc, char **argv)
         cudaMemcpyHostToDevice
     );
 
+    clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+
     // Run kernel(s)
     dim3 blockSize (THREAD_DIM, THREAD_DIM);
     dim3 gridSize (ceil(rows / (float)THREAD_DIM), ceil(cols / (float)THREAD_DIM));
     rgbaToGreyscaleGPU<<< gridSize, blockSize >>>(d_rgbaImage, d_greyImage, rows, cols);
+
+    clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+    uint64_t diff = (1000000000L * (end.tv_sec - start.tv_sec) + end.tv_nsec - start.tv_nsec) / 1e6;
+
+    printf("[INFO] Greyscale operation lasted %llu ms\n", diff);
 
     // Copy results to CPU
     cudaMemcpy(
