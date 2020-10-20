@@ -156,7 +156,7 @@ int main(int argc, char **argv)
     cudaMalloc(&d_rgbaImage, sizeof(uchar4) * size);
     cudaMalloc(&d_greyImage, sizeof(unsigned char) * size);
 
-    cudaMemset(&d_greyImage, 0, sizeof(unsigned char) * size);
+    cudaMemset(&d_greyImage, 255, sizeof(unsigned char) * size);
 
     // Copy data to GPU
     cudaMemcpy(
