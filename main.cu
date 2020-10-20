@@ -116,8 +116,7 @@ int readImage(
 
 void writeImage(std::string filename, unsigned char *imageGrey)
 {
-    cv::imwrite(filename.c_str() + ".jpg", *imageGrey);
-    cv::imwrite(filename.c_str() + ".png", *imageGrey);
+    cv::imwrite(filename.c_str(), *imageGrey);
 }
 
 int main(int argc, char **argv)
