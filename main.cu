@@ -40,6 +40,38 @@ __global__ void medianFilterGPU(float* greyImageData, int width, int height, flo
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
 
+    int filterWidth = 3;
+    int filterHeight = 3;
+
+    int filter[9] {
+        0, 1, 0,
+        1, 1, 1,
+        0, 1, 0
+    };
+
+    int pixelValues[9] {0};
+
+    if (x > cols - width + 1 || y > rows - height + 1)
+    {
+        return;
+    }
+
+    int p = 0;
+    for (int hh = 0; hh < filterHeight; hh++) 
+    {
+        for (int ww = 0; ww < filterWidth; ww++) 
+        {
+            if (filter[hh * filterWidth + ww] == 1)
+            {
+                int idx = x * width + y + (hh * filterWidth + ww);
+                pixel_value[p] = greyImageData[idx];
+                p++;
+            }
+        }
+    }
+
+    // Get median pixel value and assign to filteredImage
+
 }
 */
 
@@ -84,7 +116,8 @@ int readImage(
 
 void writeImage(std::string filename, unsigned char *imageGrey)
 {
-    cv::imwrite(filename.c_str(), *imageGrey);
+    cv::imwrite(filename.c_str() + ".jpg", *imageGrey);
+    cv::imwrite(filename.c_str() + ".png", *imageGrey);
 }
 
 int main(int argc, char **argv)
@@ -123,6 +156,7 @@ int main(int argc, char **argv)
     // Allocate Memory
     cudaMalloc(&d_rgbaImage, sizeof(uchar4) * size);
     cudaMalloc(&d_greyImage, sizeof(unsigned char) * size);
+
     cudaMemset(&d_greyImage, 0, sizeof(unsigned char) * size);
 
     // Copy data to GPU
