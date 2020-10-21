@@ -30,7 +30,9 @@ __global__ void rgbaToGreyscaleGPU(
     }
 
     uchar4 rgba = rgbaImage[y * cols + x];
-    greyImage[y * cols + x] = (0.299f * rgba.x) + (0.587f * rgba.y) + (0.114f * rgba.z);
+    unsigned char greyValue =  (0.299f * rgba.x) + (0.587f * rgba.y) + (0.114f * rgba.z);
+    printf("%c\n", greyValue);
+    greyImage[y * cols + x] = greyValue;
 }
 
 /*
@@ -156,7 +158,7 @@ int main(int argc, char **argv)
     cudaMalloc(&d_rgbaImage, sizeof(uchar4) * size);
     cudaMalloc(&d_greyImage, sizeof(unsigned char) * size);
 
-    cudaMemset(&d_greyImage, 255, sizeof(unsigned char) * size);
+    cudaMemset(&d_greyImage, 0, sizeof(unsigned char) * size);
 
     // Copy data to GPU
     cudaMemcpy(
