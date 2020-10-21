@@ -118,13 +118,14 @@ int readImage(
 
 void writeImage(std::string filename, unsigned char *imageGrey)
 {
-    cv::imwrite(filename.c_str(), *imageGrey);
+    std::string outFile = "grey_" + filename;
+    cv::imwrite(outFile.c_str(), *imageGrey);
 }
 
 int main(int argc, char **argv)
 {
-    if (argc != 3) {
-        cerr << "Usage: ./main input_file output_file" << endl;
+    if (argc != 2) {
+        cerr << "Usage: ./main input_file" << endl;
         exit(1);
     }
 
@@ -132,8 +133,7 @@ int main(int argc, char **argv)
     int err;
 
     std::string input_file  = std::string(argv[1]);
-    std::string output_file = std::string(argv[2]);
-
+    
     int rows;
     int cols;
     int size;
@@ -189,7 +189,7 @@ int main(int argc, char **argv)
     );
 
     // Write Image
-    writeImage(output_file, inputImageGrey);
+    writeImage(input_file, inputImageGrey);
 
     // Free Memory
     cudaFree(&d_rgbaImage);
