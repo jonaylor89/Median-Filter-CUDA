@@ -2,4 +2,4 @@ target/
 opencv/
 main
 a.out
-grey.jpg
+*.jpg
