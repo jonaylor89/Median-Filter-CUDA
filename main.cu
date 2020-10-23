@@ -15,7 +15,7 @@ using namespace cv;
 using namespace std;
 
 Mat inputImage;
-Mat inputImageGrey;
+Mat outputImage;
 
 __global__ void rgbaToGreyscaleGPU(
     uchar4 *rgbaImage, 
@@ -37,7 +37,7 @@ __global__ void rgbaToGreyscaleGPU(
     greyImage[y * cols + x] = greyValue;
 }
 
-__global__ void medianFilterGPU(unsigned char* greyImageData, int width, int height, unsigned char *filteredImage)
+__global__ void medianFilterGPU(unsigned char* greyImageData, unsigned char *filteredImage, int width, int heightj)
 {
 
     int x = blockIdx.x * blockDim.x + threadIdx.x;
@@ -85,7 +85,6 @@ __global__ void medianFilterGPU(unsigned char* greyImageData, int width, int hei
     }
 
     filteredImage[row * width + col] = pixelValues[(windowSize * windowSize) / 2];
-
 }
 
 int readImage(
@@ -99,7 +98,6 @@ int readImage(
 
     Mat image;
     Mat imageRGBA;
-    Mat imageGrey;
 
     printf("[DEBUG] %s", "Reading image\n");
     image = imread(filename.c_str(), IMREAD_COLOR);
@@ -112,9 +110,9 @@ int readImage(
     printf("[DEBUG] %s", "Convert color\n");
     cvtColor(image, imageRGBA, COLOR_BGR2RGBA);
 
-    imageGrey.create(image.rows, image.cols, CV_8UC1);
+    outputImage.create(image.rows, image.cols, CV_8UC1);
 
-    if (!image.isContinuous() || !imageGrey.isContinuous())
+    if (!image.isContinuous())
     {
         cerr << "Images aren't continous: " << filename << endl;
         return 1;
@@ -124,7 +122,7 @@ int readImage(
     // inputImage = (uchar4 *)imageRGBA.ptr<unsigned char>(0);
     // inputImageGrey = imageGrey.ptr<unsigned char>(0);
     inputImage = imageRGBA;
-    inputImageGrey = imageGrey;
+    outputImage = outputImage;
 
     *rows = imageRGBA.rows;
     *cols = imageRGBA.cols;
@@ -160,17 +158,22 @@ int main(int argc, char **argv)
 
     uchar4 *d_rgbaImage;
     unsigned char *d_greyImage;
+    unsigned char *d_filteredImage;
+
+    dim3 blockSize (THREAD_DIM, THREAD_DIM);
+    dim3 gridSize (ceil(cols / (float)THREAD_DIM), ceil(rows / (float)THREAD_DIM));
 
     struct timespec start, end;
+    uint64_t diff;
 
     // Read in image
     err = readImage(
-	input_file, 
-	// &inputImage, 
-	// &inputImageGrey, 
-	&rows, 
-	&cols
+	    input_file, 
+	    // &inputImage, 
+	    &rows, 
+	    &cols
     );
+
     if (err != 0)
     {
         return 1;
@@ -183,8 +186,10 @@ int main(int argc, char **argv)
     printf("[DEBUG] %s\n", "Allocating Memory");
     cudaMalloc(&d_rgbaImage, sizeof(uchar4) * size);
     cudaMalloc(&d_greyImage, sizeof(unsigned char) * size);
+    cudaMalloc(&d_filteredImage, sizeof(unsigned char) * size);
 
     cudaMemset(d_greyImage, 0, sizeof(unsigned char) * size);
+    cudaMemset(d_filteredImage, 0, sizeof(unsigned char) * size);
 
     // Copy data to GPU
     printf("[DEBUG] %s\n", "Copying memory to GPU");
@@ -195,33 +200,39 @@ int main(int argc, char **argv)
         cudaMemcpyHostToDevice
     );
 
+    // Run kernel(s)
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
 
-    // Run kernel(s)
-    printf("[DEBUG] %s\n", "Running Kernel");
-    dim3 blockSize (THREAD_DIM, THREAD_DIM);
-    dim3 gridSize (ceil(cols / (float)THREAD_DIM), ceil(rows / (float)THREAD_DIM));
+    printf("[DEBUG] %s\n", "Running Greyscale Kernel");
     rgbaToGreyscaleGPU<<< gridSize, blockSize >>>(d_rgbaImage, d_greyImage, rows, cols);
 
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-    uint64_t diff = (1000000000L * (end.tv_sec - start.tv_sec) + end.tv_nsec - start.tv_nsec) / 1e6;
+    diff = (1000000000L * (end.tv_sec - start.tv_sec) + end.tv_nsec - start.tv_nsec) / 1e6;
 
     printf("[INFO] Greyscale operation lasted %llu ms\n", diff);
 
-    
+    clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+
+    printf("[DEBUG] %s\n", "Running Filter Kernel");
+    medianFilterGPU<<< gridSize, blockSize >>>(d_greyImage, d_filteredImage, rows, cols);
+
+    clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+    diff = (1000000000L * (end.tv_sec - start.tv_sec) + end.tv_nsec - start.tv_nsec) / 1e6;
+
+    printf("[INFO] median operation lasted %llu ms\n", diff);
 
     // Copy results to CPU
-    unsigned char *inputImageGreyPtr = inputImageGrey.ptr<unsigned char>(0);
+    unsigned char *outputImagePtr = outputImage.ptr<unsigned char>(0);
     cudaMemcpy(
-	inputImageGreyPtr,
-        d_greyImage, 
+	    outputImagePtr,
+        d_filteredImage, 
         sizeof(unsigned char) * size, 
         cudaMemcpyDeviceToHost
     );
 
     // Write Image
-    Mat outputImage = Mat(rows, cols, CV_8UC1, inputImageGreyPtr);
-    writeImage(input_file, outputImage);
+    Mat outputImageMat = Mat(rows, cols, CV_8UC1, inputImageGreyPtr);
+    writeImage(input_file, outputImageMat);
 
     // Free Memory
     cudaFree(&d_rgbaImage);
