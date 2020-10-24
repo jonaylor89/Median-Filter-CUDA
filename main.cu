@@ -37,7 +37,7 @@ __global__ void rgbaToGreyscaleGPU(
     greyImage[y * cols + x] = greyValue;
 }
 
-__global__ void medianFilterGPU(unsigned char* greyImageData, unsigned char *filteredImage, int width, int heightj)
+__global__ void medianFilterGPU(unsigned char* greyImageData, unsigned char *filteredImage, int rows, int cols)
 {
 
     int x = blockIdx.x * blockDim.x + threadIdx.x;
@@ -53,21 +53,23 @@ __global__ void medianFilterGPU(unsigned char* greyImageData, unsigned char *fil
 
     unsigned char pixelValues[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 
-    if (x > cols - width + 1 || y > rows - height + 1)
+    if (
+	x > cols - windowSize + 1 || 
+	y > rows - windowSize + 1 ||
+	x < windowSize - 1 ||
+	y < windowSize - 1)
     {
         return;
     }
 
-    int p = 0;
     for (int hh = 0; hh < windowSize; hh++) 
     {
         for (int ww = 0; ww < windowSize; ww++) 
         {
             if (filter[hh * windowSize + ww] == 1)
             {
-                int idx = x * width + y + (hh * windowSize + ww);
-                pixel_value[p] = greyImageData[idx];
-                p++;
+                int idx = (y + hh - 1) * cols + (x + ww - 1);
+                pixelValues[hh * windowSize + ww] = greyImageData[idx];
             }
         }
     }
@@ -77,14 +79,15 @@ __global__ void medianFilterGPU(unsigned char* greyImageData, unsigned char *fil
 	for (int j = i + 1; j < (windowSize * windowSize); j++) {
 	    if (pixelValues[i] > pixelValues[j]) {
 		//Swap the variables.
-		char tmp = filterVector[i];
+		char tmp = pixelValues[i];
 		pixelValues[i] = pixelValues[j];
 		pixelValues[j] = tmp;
 	    }
 	}
     }
 
-    filteredImage[row * width + col] = pixelValues[(windowSize * windowSize) / 2];
+    unsigned char filteredValue = pixelValues[(windowSize * windowSize) / 2];
+    filteredImage[y * cols + x] = filteredValue;
 }
 
 int readImage(
@@ -118,7 +121,7 @@ int readImage(
         return 1;
     }
 
-    printf("[DEBUG] %s", "Convert to pointers\n");
+    // printf("[DEBUG] %s", "Convert to pointers\n");
     // inputImage = (uchar4 *)imageRGBA.ptr<unsigned char>(0);
     // inputImageGrey = imageGrey.ptr<unsigned char>(0);
     inputImage = imageRGBA;
@@ -130,11 +133,11 @@ int readImage(
     return 0;
 }
 
-void writeImage(string filename, Mat imageGrey)
+void writeImage(string filename, string prefix, Mat outputImage)
 {
-    string outFile = "grey_" + filename;
+    string outFile = prefix + filename;
 
-    cv::imwrite(outFile.c_str(), imageGrey);
+    cv::imwrite(outFile.c_str(), outputImage);
 }
 
 int main(int argc, char **argv)
@@ -160,9 +163,6 @@ int main(int argc, char **argv)
     unsigned char *d_greyImage;
     unsigned char *d_filteredImage;
 
-    dim3 blockSize (THREAD_DIM, THREAD_DIM);
-    dim3 gridSize (ceil(cols / (float)THREAD_DIM), ceil(rows / (float)THREAD_DIM));
-
     struct timespec start, end;
     uint64_t diff;
 
@@ -180,6 +180,8 @@ int main(int argc, char **argv)
     }
 
     size = rows * cols;
+    dim3 blockSize (THREAD_DIM, THREAD_DIM);
+    dim3 gridSize (ceil(cols / (float)THREAD_DIM), ceil(rows / (float)THREAD_DIM));
     printf("[DEBUG] Size is: %d\n", size);
 
     // Allocate Memory
@@ -231,8 +233,8 @@ int main(int argc, char **argv)
     );
 
     // Write Image
-    Mat outputImageMat = Mat(rows, cols, CV_8UC1, inputImageGreyPtr);
-    writeImage(input_file, outputImageMat);
+    Mat outputImageMat = Mat(rows, cols, CV_8UC1, outputImagePtr);
+    writeImage(input_file, string("filtered_"), outputImageMat);
 
     // Free Memory
     cudaFree(&d_rgbaImage);
