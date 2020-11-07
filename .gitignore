@@ -2,6 +2,5 @@ target/
 opencv/
 main
 a.out
-*.jpg
 
 Images-modified/
