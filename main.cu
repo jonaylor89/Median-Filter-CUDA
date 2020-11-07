@@ -38,7 +38,7 @@ __global__ void rgbaToGreyscaleGPU(
     greyImage[y * cols + x] = greyValue;
 }
 
-__global__ void medianFilterGPU(unsigned char* greyImageData, unsigned char *filteredImage, int width, int heightj)
+__global__ void medianFilterGPU(unsigned char* greyImageData, unsigned char *filteredImage, int rows, int cols)
 {
 
     int x = blockIdx.x * blockDim.x + threadIdx.x;
@@ -54,38 +54,42 @@ __global__ void medianFilterGPU(unsigned char* greyImageData, unsigned char *fil
 
     unsigned char pixelValues[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 
-    if (x > cols - width + 1 || y > rows - height + 1)
+    if (
+        x > cols - windowSize + 1 ||
+        y > rows - windowSize + 1 ||
+        x < windowSize - 1 ||
+        y < windowSize - 1
+    )
     {
         return;
     }
 
-    int p = 0;
     for (int hh = 0; hh < windowSize; hh++) 
     {
         for (int ww = 0; ww < windowSize; ww++) 
         {
             if (filter[hh * windowSize + ww] == 1)
             {
-                int idx = x * width + y + (hh * windowSize + ww);
-                pixel_value[p] = greyImageData[idx];
-                p++;
+                int idx = (y + hh - 1) * cols + (x + ww - 1);
+                pixel_value[hh * windowSize + ww] = greyImageData[idx];
             }
         }
     }
 
     // Get median pixel value and assign to filteredImage
     for (int i = 0; i < (windowSize * windowSize); i++) {
-	for (int j = i + 1; j < (windowSize * windowSize); j++) {
-	    if (pixelValues[i] > pixelValues[j]) {
-		//Swap the variables.
-		char tmp = filterVector[i];
-		pixelValues[i] = pixelValues[j];
-		pixelValues[j] = tmp;
+	    for (int j = i + 1; j < (windowSize * windowSize); j++) {
+	        if (pixelValues[i] > pixelValues[j]) {
+		        //Swap the variables.
+		        char tmp = pixelValues[i];
+		        pixelValues[i] = pixelValues[j];
+		        pixelValues[j] = tmp;
+	        }
 	    }
-	}
     }
 
-    filteredImage[row * width + col] = pixelValues[(windowSize * windowSize) / 2];
+    unsigned char filteredValue = pixelValues[(windowSize * windowSize) / 2];
+    filteredImage[row * width + col] = filteredValue;
 }
 
 inline void printTime(string task, struct timespec start, struct timespec end)
