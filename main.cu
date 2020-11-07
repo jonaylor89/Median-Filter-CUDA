@@ -13,7 +13,7 @@
 
 #define THREAD_DIM 16
 #define NUM_STREAMS 16
-#Define MAX_IMAGE_SIZE (1920 * 1080)
+#define MAX_IMAGE_SIZE (1920 * 1080)
 
 using namespace cv;
 using namespace std;
@@ -142,7 +142,8 @@ void writeImage(string dirname, string filename, string prefix, Mat imageGrey)
 
 int main(int argc, char **argv)
 {
-    if (argc < 2) {
+    if (argc < 2) 
+    {
         cerr << "Usage: ./main inputDirectory" << endl;
         exit(1);
     }
