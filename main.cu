@@ -4,7 +4,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <dirent.h>
+#include <unistd.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 
 #include <cuda_runtime.h>
 
@@ -99,28 +101,29 @@ inline void printTime(string task, struct timespec start, struct timespec end)
     printf("[INFO] %s operation lasted %llu ms\n", task, diff);
 }
 
-void read_directory(string *name, vector<string> *v)
+void read_directory(string name, vector<string> *v)
 {
     DIR* dirp = opendir(name.c_str());
     struct dirent * dp;
     while ((dp = readdir(dirp)) != NULL) {
-        v.push_back(dp->d_name);
+        v->push_back(dp->d_name);
     }
     closedir(dirp);
 }
 
-void readImage(string filename, Mat* inputImage, Mat* inputImageGrey)
+void readImage(string filename, Mat* inputImage, Mat* imageGrey)
 {
 
     Mat image;
     Mat imageRGBA;
+    Mat outputImage;
 
     printf("[DEBUG] %s", "Reading image\n");
     image = imread(filename.c_str(), IMREAD_COLOR);
     if (image.empty())
     {
         cerr << "Couldn't open file: " << filename << endl;
-        return 1;
+	return;
     }
 
     printf("[DEBUG] %s", "Convert color\n");
@@ -128,12 +131,12 @@ void readImage(string filename, Mat* inputImage, Mat* inputImageGrey)
 
     outputImage.create(image.rows, image.cols, CV_8UC1);
 
-    inputImage = imageRGBA;
-    outputImage = outputImage;
+    *inputImage = imageRGBA;
+    *imageGrey = outputImage;
 
 }
 
-void writeImage(string dirname, string filename, string prefix, Mat imageGrey)
+void writeImage(string dirname, string filename, string prefix, Mat outputImage)
 {
     string outFile = dirname + string("/") + prefix + filename;
 
@@ -152,23 +155,29 @@ int main(int argc, char **argv)
     printf("[DEBUG] operating on directory `%s`\n", argv[1]);
     string inputDir  = string(argv[1]);
 
-    string outputDir = string("motified") + inputDir
+    string outputDir = string("motified") + inputDir;
 
-    filesystem::create_directory(outputDir)j;
+    struct stat st = {0};
 
-    vector<string> inputFilenames = read_directory(inputDir);
+    if (stat(outputDir.c_str(), &st) == -1) {
+        mkdir(outputDir.c_str(), 0700);
+    }
+
+    vector<string> inputFilenames;
+    read_directory(inputDir, &inputFilenames);
     
-    int err;
-    int totalSize;
     Mat outputImage;
-    vector<mat> inputImages;
-    vector<mat> outputImages;
+    vector<Mat> inputImages;
+    vector<Mat> outputImages;
 
     cudaStream_t streams[NUM_STREAMS];
     for (int i = 0; i < NUM_STREAMS; i++) { cudaStreamCreate(&streams[i]); }
 
     struct timespec start, end;
-
+    
+    uchar4 *d_rgbaImage;
+    unsigned char *d_greyImage;
+    unsigned char *d_filteredImage;
 
     // Allocate Memory
     printf("[DEBUG] %s\n", "Allocating Memory");
@@ -186,6 +195,7 @@ int main(int argc, char **argv)
         readImage(
             curImage, 
             &imageMat, 
+	    &outputImage
         );
 
         inputImages.push_back(imageMat);
@@ -194,10 +204,6 @@ int main(int argc, char **argv)
     for (int i = 0; i < inputImages.size(); i++)
     {
 
-
-        uchar4 *d_rgbaImage;
-        unsigned char *d_greyImage;
-        unsigned char *d_filteredImage;
 
         const int curStream = i % NUM_STREAMS; 
         Mat curImageMat = inputImages[i];
@@ -216,7 +222,7 @@ int main(int argc, char **argv)
         printf("[DEBUG] %s\n", "Copying memory to GPU");
         cudaMemcpyAsync(
             d_rgbaImage + MAX_IMAGE_SIZE * curStream, 
-            (uchar4 *)curImage.ptr<unsigned char>(0), 
+            (uchar4 *)curImageMat.ptr<unsigned char>(0), 
             sizeof(uchar4) * size, 
             cudaMemcpyHostToDevice,
             streams[curStream]
@@ -224,12 +230,12 @@ int main(int argc, char **argv)
 
         // Run kernel(s)
         clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-        rgbaToGreyscaleGPU<<< gridSize, blockSize, streams[curStream] >>>(d_rgbaImage, d_greyImage, rows, cols);
+        rgbaToGreyscaleGPU<<< gridSize, blockSize, 0, streams[curStream] >>>(d_rgbaImage, d_greyImage, rows, cols);
         clock_gettime(CLOCK_MONOTONIC_RAW, &end);
         printTime("Greyscale", start, end);
 
         clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-        medianFilterGPU<<< gridSize, blockSize, streams[curStream] >>>(d_greyImage, d_filteredImage, rows, cols);
+        medianFilterGPU<<< gridSize, blockSize, 0, streams[curStream] >>>(d_greyImage, d_filteredImage, rows, cols);
         clock_gettime(CLOCK_MONOTONIC_RAW, &end);
         printTime("Median Filter", start, end);
 
@@ -242,7 +248,7 @@ int main(int argc, char **argv)
             cudaMemcpyDeviceToHost,
             streams[curStream]
         );
-        Mat outputImageMat = Mat(rows, cols, CV_8UC1, inputImageGreyPtr);
+        Mat outputImageMat = Mat(rows, cols, CV_8UC1, outputImagePtr);
         outputImages.push_back(outputImageMat);
     }
 
@@ -257,7 +263,7 @@ int main(int argc, char **argv)
     for (int i = 0; i < outputImages.size(); i++)
     {
         // Write Image
-        writeImage(outputDir, curImage, "modified", outputImages[i]);
+        writeImage(outputDir, inputFilenames[i], "modified", outputImages[i]);
     }
 
     // Free Memory
