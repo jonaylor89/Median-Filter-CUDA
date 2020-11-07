@@ -129,9 +129,9 @@ void readImage(string filename, Mat* inputImage, Mat* inputImageGrey)
 
 }
 
-void writeImage(string filename, string prefix, Mat imageGrey)
+void writeImage(string dirname, string filename, string prefix, Mat imageGrey)
 {
-    string outFile = prefix + filename;
+    string outFile = dirname + string("/") + prefix + filename;
 
     cv::imwrite(outFile.c_str(), imageGrey);
 }
@@ -147,7 +147,9 @@ int main(int argc, char **argv)
     printf("[DEBUG] operating on directory `%s`\n", argv[1]);
     string inputDir  = string(argv[1]);
 
-    filesystem::create_directory(string("motified") + inputDIr);
+    string outputDir = string("motified") + inputDir
+
+    filesystem::create_directory(outputDir)j;
 
     vector<string> inputFilenames = read_directory(inputDir);
     
@@ -250,7 +252,7 @@ int main(int argc, char **argv)
     for (int i = 0; i < outputImages.size(); i++)
     {
         // Write Image
-        writeImage(curImage, "modified", outputImages[i]);
+        writeImage(outputDir, curImage, "modified", outputImages[i]);
     }
 
     // Free Memory
