@@ -71,7 +71,7 @@ __global__ void medianFilterGPU(unsigned char* greyImageData, unsigned char *fil
             if (filter[hh * windowSize + ww] == 1)
             {
                 int idx = (y + hh - 1) * cols + (x + ww - 1);
-                pixel_value[hh * windowSize + ww] = greyImageData[idx];
+                pixelValues[hh * windowSize + ww] = greyImageData[idx];
             }
         }
     }
@@ -89,7 +89,7 @@ __global__ void medianFilterGPU(unsigned char* greyImageData, unsigned char *fil
     }
 
     unsigned char filteredValue = pixelValues[(windowSize * windowSize) / 2];
-    filteredImage[row * width + col] = filteredValue;
+    filteredImage[y * cols + x] = filteredValue;
 }
 
 inline void printTime(string task, struct timespec start, struct timespec end)
@@ -137,7 +137,7 @@ void writeImage(string dirname, string filename, string prefix, Mat imageGrey)
 {
     string outFile = dirname + string("/") + prefix + filename;
 
-    cv::imwrite(outFile.c_str(), imageGrey);
+    cv::imwrite(outFile.c_str(), outputImage);
 }
 
 int main(int argc, char **argv)
