@@ -98,7 +98,7 @@ inline void printTime(string task, struct timespec start, struct timespec end)
 {
     uint64_t diff = (1000000000L * (end.tv_sec - start.tv_sec) + end.tv_nsec - start.tv_nsec) / 1e6;
 
-    printf("[INFO] %s operation lasted %llu ms\n", task, diff);
+    // printf("[INFO] %s operation lasted %llu ms\n", task, diff);
 }
 
 void read_directory(string name, vector<string> *v)
@@ -118,7 +118,7 @@ void readImage(string filename, Mat* inputImage, Mat* imageGrey)
     Mat imageRGBA;
     Mat outputImage;
 
-    printf("[DEBUG] %s", "Reading image\n");
+    // printf("[DEBUG] %s", "Reading image\n");
     image = imread(filename.c_str(), IMREAD_COLOR);
     if (image.empty())
     {
@@ -126,7 +126,7 @@ void readImage(string filename, Mat* inputImage, Mat* imageGrey)
 	return;
     }
 
-    printf("[DEBUG] %s", "Convert color\n");
+    // printf("[DEBUG] %s", "Convert color\n");
     cvtColor(image, imageRGBA, COLOR_BGR2RGBA);
 
     outputImage.create(image.rows, image.cols, CV_8UC1);
@@ -152,7 +152,7 @@ int main(int argc, char **argv)
     }
 
     // Define Variables
-    printf("[DEBUG] operating on directory `%s`\n", argv[1]);
+    // printf("[DEBUG] operating on directory `%s`\n", argv[1]);
     string inputDir  = string(argv[1]);
 
     string outputDir = string("motified") + inputDir;
@@ -180,7 +180,7 @@ int main(int argc, char **argv)
     unsigned char *d_filteredImage;
 
     // Allocate Memory
-    printf("[DEBUG] %s\n", "Allocating Memory");
+    // printf("[DEBUG] %s\n", "Allocating Memory");
     cudaMalloc(&d_rgbaImage, sizeof(uchar4) * MAX_IMAGE_SIZE * NUM_STREAMS);
     cudaMalloc(&d_greyImage, sizeof(unsigned char) * MAX_IMAGE_SIZE * NUM_STREAMS);
     cudaMalloc(&d_filteredImage, sizeof(unsigned char) * MAX_IMAGE_SIZE * NUM_STREAMS);
@@ -219,7 +219,7 @@ int main(int argc, char **argv)
         dim3 blockSize (THREAD_DIM, THREAD_DIM);
 
         // Copy data to GPU
-        printf("[DEBUG] %s\n", "Copying memory to GPU");
+        // printf("[DEBUG] %s\n", "Copying memory to GPU");
         cudaMemcpyAsync(
             d_rgbaImage + MAX_IMAGE_SIZE * curStream, 
             (uchar4 *)curImageMat.ptr<unsigned char>(0), 
@@ -263,7 +263,7 @@ int main(int argc, char **argv)
     for (int i = 0; i < outputImages.size(); i++)
     {
         // Write Image
-        writeImage(outputDir, inputFilenames[i], "modified", outputImages[i]);
+        writeImage(outputDir, to_string(i) + string(".jpg"), "modified_", outputImages[i]);
     }
 
     // Free Memory
