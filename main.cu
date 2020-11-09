@@ -234,16 +234,26 @@ int main(int argc, char **argv)
         );
 
         // Run kernel(s)
-        rgbaToGreyscaleGPU<<< gridSize, blockSize, 0, streams[curStream] >>>(d_rgbaImage, d_greyImage, rows, cols);
+        rgbaToGreyscaleGPU<<< gridSize, blockSize, 0, streams[curStream] >>>(
+            d_rgbaImage + (MAX_IMAGE_SIZE * curStream), 
+            d_greyImage + (MAX_IMAGE_SIZE * curStream), 
+            rows, 
+            cols
+        );
 
-        medianFilterGPU<<< gridSize, blockSize, 0, streams[curStream] >>>(d_greyImage, d_filteredImage, rows, cols);
+        medianFilterGPU<<< gridSize, blockSize, 0, streams[curStream] >>>(
+            d_greyImage + (MAX_IMAGE_SIZE * curStream), 
+            d_filteredImage + (MAX_IMAGE_SIZE * curStream), 
+            rows, 
+            cols
+        );
 
         // Copy results to CPU
         unsigned char *outputImagePtr = outputImage.ptr<unsigned char>(0);
         printf("[DEBUG] %s\n", "Copying memory from GPU");
         cudaMemcpyAsync(
             outputImagePtr,
-            d_filteredImage, 
+            d_filteredImage + MAX_IMAGE_SIZE * curStream, 
             sizeof(unsigned char) * size, 
             cudaMemcpyDeviceToHost,
             streams[curStream]
