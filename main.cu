@@ -230,7 +230,8 @@ int main(int argc, char **argv)
 
         // Run kernel(s)
         clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-        rgbaToGreyscaleGPU<<< gridSize, blockSize, 0, streams[curStream] >>>(d_rgbaImage, d_greyImage, rows, cols);
+        rgbaToGreyscaleGPU<<< gridSize, blockSize, 0, streams[curStream] >>>(
+            d_rgbaImage + (MAX_IMAGE_SIZE * curStream), d_greyImage + (MAX_IMAGE_SIZE * curStream), rows, cols);
         clock_gettime(CLOCK_MONOTONIC_RAW, &end);
         printTime("Greyscale", start, end);
 
@@ -243,7 +244,7 @@ int main(int argc, char **argv)
         unsigned char *outputImagePtr = outputImage.ptr<unsigned char>(0);
         cudaMemcpyAsync(
             outputImagePtr,
-            d_filteredImage, 
+            d_filteredImage + MAX_IMAGE_SIZE * curStream, 
             sizeof(unsigned char) * size, 
             cudaMemcpyDeviceToHost,
             streams[curStream]
