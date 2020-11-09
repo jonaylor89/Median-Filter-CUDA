@@ -231,12 +231,21 @@ int main(int argc, char **argv)
         // Run kernel(s)
         clock_gettime(CLOCK_MONOTONIC_RAW, &start);
         rgbaToGreyscaleGPU<<< gridSize, blockSize, 0, streams[curStream] >>>(
-            d_rgbaImage + (MAX_IMAGE_SIZE * curStream), d_greyImage + (MAX_IMAGE_SIZE * curStream), rows, cols);
+            d_rgbaImage + (MAX_IMAGE_SIZE * curStream), 
+            d_greyImage + (MAX_IMAGE_SIZE * curStream), 
+            rows, 
+            cols
+        );
         clock_gettime(CLOCK_MONOTONIC_RAW, &end);
         printTime("Greyscale", start, end);
 
         clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-        medianFilterGPU<<< gridSize, blockSize, 0, streams[curStream] >>>(d_greyImage, d_filteredImage, rows, cols);
+        medianFilterGPU<<< gridSize, blockSize, 0, streams[curStream] >>>(
+            d_greyImage + (MAX_IMAGE_SIZE * curStream), 
+            d_filteredImage + (MAX_IMAGE_SIZE * curStream), 
+            rows, 
+            cols
+        );
         clock_gettime(CLOCK_MONOTONIC_RAW, &end);
         printTime("Median Filter", start, end);
 
