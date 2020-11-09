@@ -98,7 +98,7 @@ inline void printTime(string task, struct timespec start, struct timespec end)
 {
     uint64_t diff = (1000000000L * (end.tv_sec - start.tv_sec) + end.tv_nsec - start.tv_nsec) / 1e6;
 
-    // printf("[INFO] %s operation lasted %llu ms\n", task, diff);
+    printf("[INFO] %s operation lasted %llu ms\n", task.c_str(), diff);
 }
 
 void read_directory(string name, vector<string> *v)
@@ -111,7 +111,7 @@ void read_directory(string name, vector<string> *v)
     closedir(dirp);
 }
 
-void readImage(string filename, Mat* inputImage, Mat* imageGrey)
+int readImage(string filename, Mat* inputImage, Mat* imageGrey)
 {
 
     Mat image;
@@ -122,8 +122,8 @@ void readImage(string filename, Mat* inputImage, Mat* imageGrey)
     image = imread(filename.c_str(), IMREAD_COLOR);
     if (image.empty())
     {
-        cerr << "Couldn't open file: " << filename << endl;
-	return;
+        cerr << "[ERROR] Couldn't open file: " << filename << endl;
+	return 1;
     }
 
     // printf("[DEBUG] %s", "Convert color\n");
@@ -134,6 +134,7 @@ void readImage(string filename, Mat* inputImage, Mat* imageGrey)
     *inputImage = imageRGBA;
     *imageGrey = outputImage;
 
+    return 0;
 }
 
 void writeImage(string dirname, string filename, string prefix, Mat outputImage)
@@ -190,20 +191,23 @@ int main(int argc, char **argv)
     {
         Mat imageMat;
         string curImage = inputFilenames[i]; 
+	string filename = inputDir + curImage;
 
         // Read in image
-        readImage(
-            curImage, 
+        int err = readImage(
+            filename, 
             &imageMat, 
 	    &outputImage
         );
 
+	if (err != 0) { continue; }
+
         inputImages.push_back(imageMat);
     }
 
+    clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     for (int i = 0; i < inputImages.size(); i++)
     {
-
 
         const int curStream = i % NUM_STREAMS; 
         Mat curImageMat = inputImages[i];
@@ -212,6 +216,7 @@ int main(int argc, char **argv)
         int cols = curImageMat.cols;
         int size = rows * cols;
  
+        printf("[DEBUG] %s\n", "Memsetting");
         cudaMemsetAsync(d_greyImage + MAX_IMAGE_SIZE * curStream, 0, sizeof(unsigned char) * MAX_IMAGE_SIZE, streams[curStream]);
         cudaMemsetAsync(d_filteredImage + MAX_IMAGE_SIZE * curStream, 0, sizeof(unsigned char) * MAX_IMAGE_SIZE, streams[curStream]);
 
@@ -219,7 +224,7 @@ int main(int argc, char **argv)
         dim3 blockSize (THREAD_DIM, THREAD_DIM);
 
         // Copy data to GPU
-        // printf("[DEBUG] %s\n", "Copying memory to GPU");
+        printf("[DEBUG] %s\n", "Copying memory to GPU");
         cudaMemcpyAsync(
             d_rgbaImage + MAX_IMAGE_SIZE * curStream, 
             (uchar4 *)curImageMat.ptr<unsigned char>(0), 
@@ -229,18 +234,13 @@ int main(int argc, char **argv)
         );
 
         // Run kernel(s)
-        clock_gettime(CLOCK_MONOTONIC_RAW, &start);
         rgbaToGreyscaleGPU<<< gridSize, blockSize, 0, streams[curStream] >>>(d_rgbaImage, d_greyImage, rows, cols);
-        clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-        printTime("Greyscale", start, end);
 
-        clock_gettime(CLOCK_MONOTONIC_RAW, &start);
         medianFilterGPU<<< gridSize, blockSize, 0, streams[curStream] >>>(d_greyImage, d_filteredImage, rows, cols);
-        clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-        printTime("Median Filter", start, end);
 
         // Copy results to CPU
         unsigned char *outputImagePtr = outputImage.ptr<unsigned char>(0);
+        printf("[DEBUG] %s\n", "Copying memory from GPU");
         cudaMemcpyAsync(
             outputImagePtr,
             d_filteredImage, 
@@ -251,6 +251,8 @@ int main(int argc, char **argv)
         Mat outputImageMat = Mat(rows, cols, CV_8UC1, outputImagePtr);
         outputImages.push_back(outputImageMat);
     }
+    clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+    printTime("total", start, end);
 
     // sync and destroy streams
     for (int i = 0; i < NUM_STREAMS; ++i)
