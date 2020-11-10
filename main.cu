@@ -13,8 +13,8 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/core.hpp>
 
-#define THREAD_DIM 16
-#define NUM_STREAMS 16
+#define THREAD_DIM 256
+#define NUM_STREAMS 32
 #define MAX_IMAGE_SIZE (1920 * 1080)
 
 using namespace cv;
@@ -239,7 +239,7 @@ int main(int argc, char **argv)
         // Copy data to GPU
 	uchar4 *curImagePtr = (uchar4 *)curImageMat.ptr<unsigned char>(0);
 	if (curImagePtr == NULL) { continue; }
-        printf("[DEBUG] %s\n", "Copying memory to GPU");
+        // printf("[DEBUG] %s\n", "Copying memory to GPU");
         cudaMemcpyAsync(
             d_rgbaImage + MAX_IMAGE_SIZE * curStream, 
             curImagePtr,
@@ -247,7 +247,7 @@ int main(int argc, char **argv)
             cudaMemcpyHostToDevice,
             streams[curStream]
         );
-        printf("[DEBUG] %s\n", "Done");
+        // printf("[DEBUG] %s\n", "Done");
 
         // Run kernel(s)
         rgbaToGreyscaleGPU<<< gridSize, blockSize, 0, streams[curStream] >>>(
@@ -266,7 +266,7 @@ int main(int argc, char **argv)
 
         // Copy results to CPU
         unsigned char *outputImagePtr = outputImages[i].ptr<unsigned char>(0);
-        printf("[DEBUG] %s\n", "Copying memory from GPU");
+        // printf("[DEBUG] %s\n", "Copying memory from GPU");
         cudaMemcpyAsync(
             outputImagePtr,
             d_filteredImage + MAX_IMAGE_SIZE * curStream, 
@@ -274,11 +274,11 @@ int main(int argc, char **argv)
             cudaMemcpyDeviceToHost,
             streams[curStream]
         );
-        printf("[DEBUG] %s\n", "Done");
+        // printf("[DEBUG] %s\n", "Done");
 
-        printf("[DEBUG] %s\n", "Add to array");
+        // printf("[DEBUG] %s\n", "Add to array");
 	outputImagesArray[i] = (FakeMat){ outputImagePtr, rows, cols }; 
-        printf("[DEBUG] %s\n", "Done");
+        // printf("[DEBUG] %s\n", "Done");
     }
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
     printTime("total", start, end);
@@ -298,14 +298,14 @@ int main(int argc, char **argv)
     }
     // printf("[DEBUG] %s\n", "Done");
 
-    printf("[DEBUG] %s\n", "Write images");
+    // printf("[DEBUG] %s\n", "Write images");
     // Write modified images to the fs
     for (int i = 0; i < inputImages.size(); i++)
     {
 
 	if (outputImagesArray[i].Ptr == NULL) { continue; }
 
-	if (i < 10) { printf("[DEBUG] %s + %d:%p\n", "output ptr", i, outputImagesArray[i].Ptr); }
+	// if (i < 10) { printf("[DEBUG] %s + %d:%p\n", "output ptr", i, outputImagesArray[i].Ptr); }
 
 	Mat outputImageMat = Mat(
 			outputImagesArray[i].rows, 
@@ -317,7 +317,7 @@ int main(int argc, char **argv)
         // Write Image
         writeImage(outputDir, to_string(i) + string(".jpg"), "modified_", outputImageMat);
     }
-    printf("[DEBUG] %s\n", "Done");
+    // printf("[DEBUG] %s\n", "Done");
 
     // Free Memory
     cudaFreeHost(&outputImages);
