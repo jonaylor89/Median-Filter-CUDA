@@ -46,7 +46,12 @@ __global__ void rgbaToGreyscaleGPU(
     greyImage[y * cols + x] = greyValue;
 }
 
-__global__ void medianFilterGPU(unsigned char* greyImageData, unsigned char *filteredImage, int rows, int cols)
+__global__ void medianFilterGPU(
+    unsigned char* greyImageData, 
+    unsigned char *filteredImage, 
+    int rows, 
+    int cols
+)
 {
 
     int x = blockIdx.x * blockDim.x + threadIdx.x;
@@ -167,7 +172,7 @@ int main(int argc, char **argv)
     vector<string> inputFilenames;
     read_directory(inputDir, &inputFilenames);
     
-    Mat outputImage;
+    vector<Mat> outputImages;
     vector<Mat> inputImages;
 
     cudaStream_t streams[NUM_STREAMS];
@@ -189,6 +194,7 @@ int main(int argc, char **argv)
     for (int i = 0; i < inputFilenames.size(); i++)
     {
         Mat imageMat;
+	Mat outputMat;
         string curImage = inputFilenames[i]; 
 	string filename = inputDir + curImage;
 
@@ -196,16 +202,17 @@ int main(int argc, char **argv)
         int err = readImage(
             filename, 
             &imageMat, 
-	    &outputImage
+	    &outputMat
         );
 
 	if (err != 0) { continue; }
 
         inputImages.push_back(imageMat);
+	outputImages.push_back(outputMat);
     }
 
-    FakeMat *outputImages;
-    cudaMallocHost(&outputImages, sizeof(FakeMat *) * inputImages.size());
+    FakeMat *outputImagesArray;
+    cudaMallocHost(&outputImagesArray, sizeof(FakeMat) * inputImages.size());
 
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     for (int i = 0; i < inputImages.size(); i++)
@@ -218,20 +225,24 @@ int main(int argc, char **argv)
         int cols = curImageMat.cols;
         int size = rows * cols;
 
-        printf("[DEBUG] %s\n", "Memsetting");
+	if (size >= MAX_IMAGE_SIZE) { continue; }
+
+        // printf("[DEBUG] %s\n", "Memsetting");
         cudaMemsetAsync(d_rgbaImage + MAX_IMAGE_SIZE * curStream, 0, sizeof(uchar4) * MAX_IMAGE_SIZE, streams[curStream]);
         cudaMemsetAsync(d_greyImage + MAX_IMAGE_SIZE * curStream, 0, sizeof(unsigned char) * MAX_IMAGE_SIZE, streams[curStream]);
         cudaMemsetAsync(d_filteredImage + MAX_IMAGE_SIZE * curStream, 0, sizeof(unsigned char) * MAX_IMAGE_SIZE, streams[curStream]);
-        printf("[DEBUG] %s\n", "Done");
+        // printf("[DEBUG] %s\n", "Done");
 
         dim3 gridSize (ceil(cols / (float)THREAD_DIM), ceil(rows / (float)THREAD_DIM));
         dim3 blockSize (THREAD_DIM, THREAD_DIM);
 
         // Copy data to GPU
+	uchar4 *curImagePtr = (uchar4 *)curImageMat.ptr<unsigned char>(0);
+	if (curImagePtr == NULL) { continue; }
         printf("[DEBUG] %s\n", "Copying memory to GPU");
         cudaMemcpyAsync(
             d_rgbaImage + MAX_IMAGE_SIZE * curStream, 
-            (uchar4 *)curImageMat.ptr<unsigned char>(0), 
+            curImagePtr,
             sizeof(uchar4) * size, 
             cudaMemcpyHostToDevice,
             streams[curStream]
@@ -254,7 +265,7 @@ int main(int argc, char **argv)
         );
 
         // Copy results to CPU
-        unsigned char *outputImagePtr = outputImage.ptr<unsigned char>(0);
+        unsigned char *outputImagePtr = outputImages[i].ptr<unsigned char>(0);
         printf("[DEBUG] %s\n", "Copying memory from GPU");
         cudaMemcpyAsync(
             outputImagePtr,
@@ -265,13 +276,8 @@ int main(int argc, char **argv)
         );
         printf("[DEBUG] %s\n", "Done");
 
-	FakeMat blah;
-	blah.Ptr = outputImagePtr;
-	blah.rows = rows;
-	blah.cols = cols;
-	
-        printf("[DEBUG] %s\n", "This breaks and who knows why");
-        outpushImages[i] = blah;
+        printf("[DEBUG] %s\n", "Add to array");
+	outputImagesArray[i] = (FakeMat){ outputImagePtr, rows, cols }; 
         printf("[DEBUG] %s\n", "Done");
     }
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
@@ -284,27 +290,37 @@ int main(int argc, char **argv)
         cudaStreamDestroy(streams[i]);
     }
 
+
+    // printf("[DEBUG] %s\n", "Mkdir");
     struct stat st = {0};
     if (stat(outputDir.c_str(), &st) == -1) {
         mkdir(outputDir.c_str(), 0700);
     }
+    // printf("[DEBUG] %s\n", "Done");
 
+    printf("[DEBUG] %s\n", "Write images");
     // Write modified images to the fs
-    for (int i = 0; i < outputImages.size(); i++)
+    for (int i = 0; i < inputImages.size(); i++)
     {
 
+	if (outputImagesArray[i].Ptr == NULL) { continue; }
+
+	if (i < 10) { printf("[DEBUG] %s + %d:%p\n", "output ptr", i, outputImagesArray[i].Ptr); }
+
 	Mat outputImageMat = Mat(
-			outputImages[i].rows, 
-			outputImages[i].cols, 
+			outputImagesArray[i].rows, 
+			outputImagesArray[i].cols, 
 			CV_8UC1, 
-			outputImages[i].Ptr
+			outputImagesArray[i].Ptr
 	);
 	  
         // Write Image
         writeImage(outputDir, to_string(i) + string(".jpg"), "modified_", outputImageMat);
     }
+    printf("[DEBUG] %s\n", "Done");
 
     // Free Memory
+    cudaFreeHost(&outputImages);
     cudaFree(&d_rgbaImage);
     cudaFree(&d_greyImage);
 
