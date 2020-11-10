@@ -169,7 +169,6 @@ int main(int argc, char **argv)
     
     Mat outputImage;
     vector<Mat> inputImages;
-    vector<FakeMat> outputImages;
 
     cudaStream_t streams[NUM_STREAMS];
     for (int i = 0; i < NUM_STREAMS; i++) { cudaStreamCreate(&streams[i]); }
@@ -204,6 +203,9 @@ int main(int argc, char **argv)
 
         inputImages.push_back(imageMat);
     }
+
+    FakeMat *outputImages;
+    cudaMallocHost(&outputImages, sizeof(FakeMat *) * inputImages.size());
 
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     for (int i = 0; i < inputImages.size(); i++)
@@ -269,7 +271,7 @@ int main(int argc, char **argv)
 	blah.cols = cols;
 	
         printf("[DEBUG] %s\n", "This breaks and who knows why");
-        outputImages.push_back(blah);
+        outpushImages[i] = blah;
         printf("[DEBUG] %s\n", "Done");
     }
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
